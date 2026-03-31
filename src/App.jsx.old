@@ -1,0 +1,1050 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+
+/* ───────────────────── DATA ───────────────────── */
+
+const ROLES = ['CEO', 'CTO', 'CMO', 'CPO', 'CFO', 'COO', 'VP Strategy', 'Board Member'];
+
+const EXERCISES = [
+  {
+    id: 'moat',
+    name: 'Competitive Moat',
+    icon: '🛡',
+    color: '#E47225',
+    canvas: 'radar',
+    duration: '15 min',
+    description: 'Map the five structural advantages that protect your business from AI-native competitors. Identify which moats are eroding and which could be fortified.',
+    fields: [
+      { id: 'network_effects', label: 'Network Effects', prompt: 'How does each additional user make your product more valuable for every other user — and can an AI clone replicate that loop?', placeholder: 'Describe the mechanism, not just "we have network effects"...' },
+      { id: 'switching_costs', label: 'Switching Costs', prompt: 'What would a customer lose — data, integrations, workflows, relationships — if they switched to an AI alternative tomorrow?', placeholder: 'Be specific about what\'s locked in and what isn\'t...' },
+      { id: 'proprietary_data', label: 'Proprietary Data', prompt: 'What data do you generate that no competitor can access, and does it compound in value over time?', placeholder: 'Think about data assets that improve with scale...' },
+      { id: 'brand_trust', label: 'Brand & Trust', prompt: 'In a world where AI can generate content instantly, what makes your brand the one customers trust with their decision?', placeholder: 'Go beyond "brand awareness" — what is the trust mechanism?...' },
+      { id: 'scale_economies', label: 'Scale Economies', prompt: 'Where does your cost per unit decrease faster than competitors as you grow — and is AI compressing that advantage?', placeholder: 'Specify the unit economics advantage and its trajectory...' },
+    ],
+  },
+  {
+    id: 'errc',
+    name: 'Blue Ocean — ERRC',
+    icon: '🧭',
+    color: '#04C9A6',
+    canvas: 'errc',
+    duration: '12 min',
+    description: 'Apply the Eliminate-Reduce-Raise-Create framework to find uncontested market space. Map where AI changes the competitive factors in your industry.',
+    fields: [
+      { id: 'eliminate', label: 'Eliminate', prompt: 'Which factors that your industry has competed on for years should be completely eliminated because AI has made them irrelevant?', placeholder: 'Name specific competitive factors to kill entirely...' },
+      { id: 'reduce', label: 'Reduce', prompt: 'Which factors should be reduced well below the industry standard because they\'re over-delivered relative to AI-era customer expectations?', placeholder: 'What are you over-investing in relative to new reality?...' },
+      { id: 'raise', label: 'Raise', prompt: 'Which factors should be raised well above the industry standard because AI creates new expectations customers didn\'t have before?', placeholder: 'What do AI-era customers now demand at a higher bar?...' },
+      { id: 'create', label: 'Create', prompt: 'Which factors should be created that the industry has never offered — things only possible because of AI or uniquely human in an AI world?', placeholder: 'What entirely new value can you offer that didn\'t exist before?...' },
+    ],
+  },
+  {
+    id: 'ansoff',
+    name: 'Ansoff Matrix',
+    icon: '📊',
+    color: '#734286',
+    canvas: 'ansoff',
+    duration: '10 min',
+    description: 'Plot your growth strategy across the four quadrants of market and product newness. Factor in how AI shifts the risk profile of each quadrant.',
+    fields: [
+      { id: 'penetration', label: 'Market Penetration', prompt: 'How can you grow share in your existing market with your existing product — and how does AI change the tactics available to you?', placeholder: 'Existing product × existing market — what\'s the play?...' },
+      { id: 'product_dev', label: 'Product Development', prompt: 'What new products or features could you build for your existing market using AI capabilities that weren\'t possible 18 months ago?', placeholder: 'New product × existing market — what AI-powered offering?...' },
+      { id: 'market_dev', label: 'Market Development', prompt: 'Which new markets could your existing product reach now that AI has changed distribution, localisation, or customer acquisition economics?', placeholder: 'Existing product × new market — where can you now reach?...' },
+      { id: 'diversification', label: 'Diversification', prompt: 'If you were to build something entirely new for an entirely new market, what would AI make possible that justifies the risk?', placeholder: 'New product × new market — what\'s the bold bet?...' },
+    ],
+  },
+];
+
+const PEER_ANSWERS = {
+  // Moat
+  network_effects: [
+    { label: 'PEER A · SaaS · Series C', text: 'Our marketplace has a classic two-sided network effect — every new supplier listing increases buyer visit frequency by 3.2%. AI clones can replicate the interface but not the supplier relationships built over 4 years. The compounding review dataset is our real lock-in.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Each user\'s behavioral data trains our recommendation engine, making it more accurate per-user. New entrants start with zero signal. We\'ve measured that users who get personalized results in week 1 retain at 2.4x the rate of generic experiences.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Cross-company benchmarking data is our network effect. Each enterprise customer who shares anonymized ops data makes the benchmark more valuable for all participants. An AI competitor would need 200+ enterprise clients before their benchmarks become statistically meaningful.' },
+  ],
+  switching_costs: [
+    { label: 'PEER A · SaaS · Series C', text: 'Three years of workflow automation configs, 40+ integrations with their tech stack, and team muscle memory. Average customer has invested 200+ hours in customization. Migration cost estimated at $180K in lost productivity per enterprise account.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Reputation and review history is non-portable. Sellers with 500+ reviews won\'t risk starting at zero elsewhere. We\'ve seen <2% annual churn from power sellers specifically because their review capital is locked in our platform.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Deep integration into compliance workflows means switching requires re-certification. Regulated industries won\'t risk audit trail discontinuity. Average contract value is $340K — the switching cost is 3x that when you factor regulatory approval timelines.' },
+  ],
+  proprietary_data: [
+    { label: 'PEER A · SaaS · Series C', text: 'We have 11 years of conversion funnel data across 3,400 e-commerce sites. We know which product page layouts convert for which verticals at which price points. This dataset is genuinely unique — no public training set captures post-click behavior at this granularity.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Real-time pricing signals from both supply and demand side across 14 markets. Our pricing model has ingested 2.1B transactions. The data compounds weekly — this week\'s pricing accuracy is better than last week\'s because of last week\'s transactions.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Cross-industry operational benchmarks from 400+ enterprises. No public model has this data because it\'s behind NDA walls. Our AI models are trained on actual outcomes, not hypothetical scenarios — that\'s a moat that gets wider with every customer cohort.' },
+  ],
+  brand_trust: [
+    { label: 'PEER A · SaaS · Series C', text: 'In financial services, our brand means "audit-safe." When an AI tool generates a report, they still need us as the system of record because regulators recognize our certification process. Trust isn\'t about awareness — it\'s about institutional credibility in regulated contexts.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Our trust mechanism is the curator model. In a world of infinite AI-generated content, our editorial team\'s "verified" badge has become more valuable, not less. Verified listings get 8x the engagement of unverified ones. AI actually amplified our trust moat.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Brand trust in enterprise is about the human relationship layer. Our CSM team has relationships with 600+ VP-level buyers. An AI startup can match our features in 6 months but can\'t replicate 4 years of trusted advisor status and the reference network that comes with it.' },
+  ],
+  scale_economies: [
+    { label: 'PEER A · SaaS · Series C', text: 'Our cost to serve drops 40% for each 10x user cohort because our core infrastructure amortizes across the base. But AI is compressing this — cloud-native AI startups can achieve our unit economics at 1/10th the scale. We need to find new scale advantages beyond infra.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Customer acquisition cost drops with scale because of SEO authority and word-of-mouth — but AI is directly attacking the SEO channel. Our real scale economy is on the supply side: we can onboard suppliers 60% cheaper than competitors because of our automated verification pipeline.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'R&D cost per customer decreases because enterprise features serve the entire base. At our current scale, each new feature costs $0.12/customer to build and maintain vs $3.40 for a startup with 50 customers. This advantage compounds but only if we keep growing enterprise logos.' },
+  ],
+  // ERRC
+  eliminate: [
+    { label: 'PEER A · SaaS · Series C', text: 'Eliminate the entire content creation workflow for landing pages. Our industry has competed on "content tools" for a decade. AI makes bespoke content creation a commodity — stop investing in it entirely. Also eliminate manual A/B test setup — AI can auto-optimize in real time.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Eliminate human-powered customer support for Tier 1 queries. 80% of support volume is answered by documentation that AI can surface instantly. Also eliminate manual curation of marketplace listings — algorithmic quality scoring replaces human reviewers.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Eliminate long-form report generation. Executives don\'t read 50-page strategy decks anymore. AI can generate those on-demand. Also eliminate the traditional RFP response process — it\'s theater that adds cost but not value for either side.' },
+  ],
+  reduce: [
+    { label: 'PEER A · SaaS · Series C', text: 'Reduce investment in generic CRM integrations — customers now expect AI to handle data flow between tools natively. Reduce the complexity of our pricing tiers from 5 to 2 — AI-era buyers want simplicity and don\'t have patience for complex packaging.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Reduce emphasis on geographic coverage as a competitive factor. AI translation and cross-border logistics APIs mean everyone can claim global reach. Also reduce the frequency of manual product updates — predictive models should surface the right inventory.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Reduce the sales engineering team by 60%. AI demos and self-service POCs mean fewer humans needed in the presales process. Reduce the breadth of our analytics dashboard — most features are unused. Focus on the 5 metrics that actually drive decisions.' },
+  ],
+  raise: [
+    { label: 'PEER A · SaaS · Series C', text: 'Raise the bar on real-time insights. Industry standard is daily dashboards — AI-era customers expect sub-second anomaly detection and proactive alerts. Also raise the quality of onboarding: personalized, AI-guided setup that gets customers to value in hours, not weeks.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Raise trust and verification standards dramatically. In an AI-generated content world, customers will pay a premium for verified, authentic marketplace listings. Raise the intelligence of search: move from keyword matching to intent understanding.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Raise the speed of implementation from 12 weeks to 2 weeks. AI-powered configuration means we can auto-map customer data schemas and pre-build integrations. Raise the standard for data security and AI governance — enterprise buyers will make this table-stakes.' },
+  ],
+  create: [
+    { label: 'PEER A · SaaS · Series C', text: 'Create an "AI strategy co-pilot" that sits alongside our core product and proactively suggests growth moves based on the customer\'s data. Nobody in our industry offers strategic recommendations beyond basic analytics. This is a new category of value.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Create a predictive demand signal service for suppliers. They currently operate on lagging signals. If we can tell suppliers what will sell next week with 80% accuracy, that\'s a value proposition that doesn\'t exist anywhere in our industry today.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Create autonomous workflow optimization — not just monitoring but actual self-healing processes that fix operational bottlenecks without human intervention. Also create an industry-specific AI model marketplace where customers can deploy vertical AI solutions through our platform.' },
+  ],
+  // Ansoff
+  penetration: [
+    { label: 'PEER A · SaaS · Series C', text: 'Use AI-powered outbound to re-engage the 70% of trial users who never converted. Personalize the nurture sequence based on their actual in-app behavior. AI also lets us identify expansion opportunities within existing accounts — predict which teams would benefit from our product before they know they need it.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Deploy AI-driven dynamic pricing to capture more GMV from existing buyer base. Also use conversational AI to reduce friction in the purchase flow — our data shows 34% cart abandonment is due to unanswered questions. AI chat at the right moment could recover $2M/quarter.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Penetrate deeper within existing accounts by using AI to map white space. Our average enterprise customer uses 3 of our 12 modules. AI-driven usage analysis can identify which unused modules would deliver highest ROI per account, enabling targeted upsell conversations.' },
+  ],
+  product_dev: [
+    { label: 'PEER A · SaaS · Series C', text: 'Build an AI analyst layer that auto-generates strategic recommendations from customer data. Current product shows data — new product interprets it. Target same buyer (marketing leaders) but shift from "tool" to "advisor." This could justify 3x pricing.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Launch an AI-powered sourcing assistant for our existing buyer base. Instead of searching our marketplace manually, buyers describe what they need and AI matches them to the optimal supplier. Moves us from a "catalog" to a "procurement brain."' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Develop an AI compliance co-pilot that monitors regulatory changes and auto-updates customer configurations. Same buyer (ops leaders in regulated industries) but entirely new product category. We have the domain expertise and data to build this — pure AI startups don\'t.' },
+  ],
+  market_dev: [
+    { label: 'PEER A · SaaS · Series C', text: 'AI translation and localization now cost 90% less. We can enter Japan, Germany, and Brazil with our existing product using AI-localized interfaces and support. Previously needed local teams — now need one person per market plus AI. TAM expansion: 3x.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Our marketplace model works for our core vertical but the same dynamics exist in adjacent verticals we\'ve never touched. AI reduces the cost of vertical customization from 6 months of dev to 6 weeks. We can replicate our playbook across 4 new verticals this year.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Mid-market companies couldn\'t afford our enterprise solution before. But AI-driven self-service onboarding drops our cost-to-serve from $50K to $5K per customer. We can now profitably serve 10x more companies at a lower price point without diluting the enterprise brand.' },
+  ],
+  diversification: [
+    { label: 'PEER A · SaaS · Series C', text: 'The bold bet: launch an AI-native competitor to ourselves before someone else does. Build a separate brand targeting the next generation of marketers who are AI-first. Cannibalize our own low end before a startup does. Fund it as a separate P&L with 18 month runway.' },
+    { label: 'PEER B · Marketplace · Growth', text: 'Build an AI-powered consulting practice that uses our proprietary data to advise companies on market strategy. Entirely new service, entirely new buyer (C-suite vs. operational users). Our data moat makes our advice better than any consulting firm. High-margin, relationship-driven revenue.' },
+    { label: 'PEER C · Enterprise · Pre-IPO', text: 'Create an industry data consortium where enterprises pool anonymized operational data and all benefit from AI models trained on the combined dataset. New product (data network), new market (cross-industry). Winner-take-all dynamics if we move first. Requires board-level conviction.' },
+  ],
+};
+
+const AI_SYNTHESIS = {
+  moat: 'Across peer responses, the strongest answers name a specific mechanism rather than a category. "We have network effects" is weak — "each additional supplier listing increases buyer visit frequency by 3.2%" is strong. Push for the quantifiable mechanism.',
+  errc: 'The best ERRC responses identify factors where the industry consensus is wrong in the AI era. Elimination is the hardest quadrant — it requires letting go of investments you\'ve built over years. Creation is where the real differentiation lives.',
+  ansoff: 'Peer answers reveal a pattern: the most confident quadrant is penetration, the most interesting is diversification. The winning strategies use AI to reduce the risk of traditionally risky quadrants (market development, diversification).',
+};
+
+/* ───────────────────── STYLES ───────────────────── */
+
+const GLOBAL_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap');
+
+:root {
+  --r2r-pink: #DE007B;
+  --r2r-charcoal: #1F1E1E;
+  --r2r-white: #FFFFFF;
+  --r2r-train: #734286;
+  --r2r-rideshare: #E0043B;
+  --r2r-hotel: #0B91DB;
+  --r2r-bus: #E47225;
+  --r2r-ferry: #2EBAD3;
+  --r2r-taxi: #FFAD00;
+  --r2r-plane: #04C9A6;
+  --r2r-bike: #89CA4B;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  min-height: 100vh;
+  background: var(--r2r-white);
+  color: var(--r2r-charcoal);
+  font-family: 'Roboto', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 0%, rgba(222,0,123,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 90%, rgba(4,201,166,0.03) 0%, transparent 60%),
+    var(--r2r-white);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4 { font-family: 'Inter', sans-serif; font-weight: 700; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(31,30,30,0.15); border-radius: 4px; }
+
+textarea {
+  outline: none;
+  font-family: 'Roboto', sans-serif;
+}
+
+textarea:focus {
+  border-color: var(--r2r-pink) !important;
+  box-shadow: 0 0 0 3px rgba(222,0,123,0.08);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.4); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.fade-up { animation: fadeUp 0.5s ease both; }
+.fade-up-1 { animation-delay: 0.05s; }
+.fade-up-2 { animation-delay: 0.1s; }
+.fade-up-3 { animation-delay: 0.15s; }
+.fade-up-4 { animation-delay: 0.2s; }
+
+.ex-card {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  cursor: pointer;
+}
+.ex-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(222,0,123,0.08);
+}
+`;
+
+/* ───────────────────── COMPONENT ───────────────────── */
+
+export default function StratOS() {
+  const [screen, setScreen] = useState('hub');
+  const [activeEx, setActiveEx] = useState(null);
+  const [role, setRole] = useState('CEO');
+  const [answers, setAnswers] = useState({});
+  const [submitted, setSubmitted] = useState({});
+  const [showCanvas, setShowCanvas] = useState(false);
+  const [coaching, setCoaching] = useState({});
+  const [loading, setLoading] = useState({});
+  const [expandedPeers, setExpandedPeers] = useState({});
+
+  // Inject global styles
+  useEffect(() => {
+    const id = 'stratos-global-css';
+    if (!document.getElementById(id)) {
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = GLOBAL_CSS;
+      document.head.appendChild(style);
+    }
+  }, []);
+
+  const getAnswer = (exId, fieldId) => answers[exId]?.[fieldId] || '';
+  const isSubmitted = (exId, fieldId) => submitted[exId]?.[fieldId] || false;
+
+  const setAnswer = useCallback((exId, fieldId, value) => {
+    setAnswers(prev => ({
+      ...prev,
+      [exId]: { ...prev[exId], [fieldId]: value },
+    }));
+  }, []);
+
+  const submitField = useCallback((exId, fieldId) => {
+    setSubmitted(prev => ({
+      ...prev,
+      [exId]: { ...prev[exId], [fieldId]: true },
+    }));
+  }, []);
+
+  const getCompletionPct = (ex) => {
+    const total = ex.fields.length;
+    const done = ex.fields.filter(f => isSubmitted(ex.id, f.id)).length;
+    return Math.round((done / total) * 100);
+  };
+
+  const getSubmittedCount = (ex) => ex.fields.filter(f => isSubmitted(ex.id, f.id)).length;
+
+  const openExercise = (ex) => {
+    setActiveEx(ex);
+    setScreen('exercise');
+    setShowCanvas(false);
+  };
+
+  // AI Coaching call
+  const fetchCoaching = useCallback(async (exName, fieldLabel, fieldId, text, currentRole) => {
+    setLoading(prev => ({ ...prev, [fieldId]: true }));
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': typeof window !== 'undefined' && window.__ANTHROPIC_API_KEY__ || '',
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: `You are an elite strategy coach embedded in StratOS. The exec (role: ${currentRole}) is working on exercise "${exName}", field "${fieldLabel}". Style: real-time, Socratic, direct. Max 2 sentences. Either ask ONE sharp follow-up question OR name the assumption they haven't examined. Never summarise. Push forward. Calibrate to AI disruption of SEO-driven growth. Tone: brilliant peer who respects their intelligence.`,
+          messages: [{ role: 'user', content: text }],
+        }),
+      });
+      const data = await response.json();
+      const coachText = data?.content?.[0]?.text || 'Keep going — push deeper on the mechanism behind this.';
+      setCoaching(prev => ({ ...prev, [fieldId]: coachText }));
+    } catch {
+      setCoaching(prev => ({ ...prev, [fieldId]: 'Keep writing — articulate the specific mechanism, not just the category.' }));
+    } finally {
+      setLoading(prev => ({ ...prev, [fieldId]: false }));
+    }
+  }, []);
+
+  /* ─── HUB SCREEN ─── */
+  if (screen === 'hub') {
+    return (
+      <div style={{ minHeight: '100vh' }}>
+        {/* Nav */}
+        <nav style={{
+          position: 'sticky', top: 0, zIndex: 100,
+          backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+          background: 'rgba(255,255,255,0.85)',
+          borderBottom: '1px solid rgba(31,30,30,0.06)',
+          padding: '12px 32px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <img src="/assets/Rome2Rio-logo_full-color.png" alt="Rome2Rio" style={{ height: 32 }} />
+            <div style={{ width: 1, height: 20, background: 'rgba(31,30,30,0.1)' }} />
+            <span style={{
+              fontFamily: 'Inter', fontWeight: 700, fontSize: 15, color: '#1F1E1E', letterSpacing: '-0.3px',
+            }}>
+              StratOS
+            </span>
+            <span style={{
+              fontFamily: 'Roboto', fontSize: 10, fontWeight: 500,
+              background: 'rgba(222,0,123,0.08)', color: '#DE007B',
+              padding: '3px 10px', borderRadius: 20, letterSpacing: '1.2px',
+            }}>
+              EXERCISES
+            </span>
+          </div>
+          <div style={{ fontFamily: 'Roboto', fontSize: 11, color: 'rgba(31,30,30,0.4)', fontWeight: 500 }}>
+            v1.0 · Vibathon 2026
+          </div>
+        </nav>
+
+        {/* Hero */}
+        <div className="fade-up" style={{ padding: '72px 32px 36px', maxWidth: 900, margin: '0 auto' }}>
+          <div style={{
+            fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: '#DE007B',
+            letterSpacing: '2px', marginBottom: 12, textTransform: 'uppercase',
+          }}>
+            Rome2Rio Strategy Lab
+          </div>
+          <h1 style={{
+            fontFamily: 'Inter', fontWeight: 700, fontSize: 'clamp(34px, 5vw, 52px)',
+            lineHeight: 1.1, letterSpacing: '-1.5px', color: '#1F1E1E',
+            marginBottom: 16,
+          }}>
+            Interactive Strategy<br />Exercise Platform
+          </h1>
+          <p style={{
+            fontFamily: 'Roboto', fontSize: 15, color: 'rgba(31,30,30,0.55)', lineHeight: 1.7,
+            maxWidth: 560,
+          }}>
+            Think out loud, get real-time coaching from AI, submit when ready, then benchmark your strategic thinking against anonymous peers. Four steps, no presentations.
+          </p>
+        </div>
+
+        {/* Role Selector */}
+        <div className="fade-up fade-up-1" style={{ padding: '0 32px 36px', maxWidth: 900, margin: '0 auto' }}>
+          <div style={{
+            background: 'rgba(31,30,30,0.02)', border: '1px solid rgba(31,30,30,0.06)',
+            borderRadius: 16, padding: 20,
+          }}>
+            <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: 'rgba(31,30,30,0.4)', letterSpacing: '1.5px', marginBottom: 12 }}>
+              YOUR ROLE
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {ROLES.map(r => (
+                <button key={r} onClick={() => setRole(r)} style={{
+                  fontFamily: 'Roboto', fontSize: 13, fontWeight: 500,
+                  padding: '7px 16px', borderRadius: 24,
+                  border: role === r ? '1px solid #DE007B' : '1px solid rgba(31,30,30,0.1)',
+                  background: role === r ? 'rgba(222,0,123,0.08)' : 'white',
+                  color: role === r ? '#DE007B' : 'rgba(31,30,30,0.5)',
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* How It Works */}
+        <div className="fade-up fade-up-2" style={{ padding: '0 32px 48px', maxWidth: 900, margin: '0 auto' }}>
+          <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: 'rgba(31,30,30,0.4)', letterSpacing: '1.5px', marginBottom: 16 }}>
+            HOW IT WORKS
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            {[
+              { n: '01', t: 'Think out loud', d: 'AI coaches in real time as you type' },
+              { n: '02', t: 'Submit when ready', d: 'Answers private until you benchmark' },
+              { n: '03', t: 'See peer answers', d: 'Anonymous benchmarks unlock on submit' },
+              { n: '04', t: 'Live canvas', d: 'Answers populate visual framework live' },
+            ].map(s => (
+              <div key={s.n} style={{
+                background: 'white', border: '1px solid rgba(31,30,30,0.06)',
+                borderRadius: 14, padding: 18,
+                boxShadow: '0 1px 3px rgba(31,30,30,0.03)',
+              }}>
+                <div style={{ fontFamily: 'Inter', fontSize: 24, fontWeight: 700, color: '#DE007B', marginBottom: 6 }}>
+                  {s.n}
+                </div>
+                <div style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: 14, color: '#1F1E1E', marginBottom: 4 }}>
+                  {s.t}
+                </div>
+                <div style={{ fontFamily: 'Roboto', fontSize: 12, color: 'rgba(31,30,30,0.45)', lineHeight: 1.5 }}>
+                  {s.d}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Exercise Cards */}
+        <div className="fade-up fade-up-3" style={{ padding: '0 32px 80px', maxWidth: 900, margin: '0 auto' }}>
+          <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: 'rgba(31,30,30,0.4)', letterSpacing: '1.5px', marginBottom: 16 }}>
+            EXERCISES
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+            {EXERCISES.map(ex => {
+              const pct = getCompletionPct(ex);
+              return (
+                <div key={ex.id} className="ex-card" onClick={() => openExercise(ex)} style={{
+                  background: 'white', border: '1px solid rgba(31,30,30,0.06)',
+                  borderRadius: 16, padding: 0, overflow: 'hidden', position: 'relative',
+                  boxShadow: '0 1px 3px rgba(31,30,30,0.03)',
+                }}>
+                  {/* Progress bar at top */}
+                  <div style={{ height: 3, background: 'rgba(31,30,30,0.04)' }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`,
+                      background: ex.color, borderRadius: 3, transition: 'width 0.5s ease',
+                    }} />
+                  </div>
+                  <div style={{ padding: 22 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                      <span style={{ fontSize: 26, lineHeight: 1 }}>{ex.icon}</span>
+                      <span style={{
+                        fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: ex.color,
+                        background: `${ex.color}12`, padding: '4px 10px', borderRadius: 20,
+                      }}>
+                        {pct}%
+                      </span>
+                    </div>
+                    <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: 18, color: '#1F1E1E', marginBottom: 8 }}>
+                      {ex.name}
+                    </h3>
+                    <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.5)', lineHeight: 1.6, marginBottom: 18 }}>
+                      {ex.description}
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: 'rgba(31,30,30,0.4)',
+                        background: 'rgba(31,30,30,0.04)', padding: '4px 10px', borderRadius: 20,
+                      }}>
+                        {ex.fields.length} fields
+                      </span>
+                      <span style={{
+                        fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: 'rgba(31,30,30,0.4)',
+                        background: 'rgba(31,30,30,0.04)', padding: '4px 10px', borderRadius: 20,
+                      }}>
+                        {ex.duration}
+                      </span>
+                      <span style={{
+                        fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: ex.color,
+                        background: `${ex.color}0D`, padding: '4px 10px', borderRadius: 20,
+                        letterSpacing: '0.5px',
+                      }}>
+                        CANVAS
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── EXERCISE SCREEN ─── */
+  const ex = activeEx;
+  const submittedCount = getSubmittedCount(ex);
+  const totalFields = ex.fields.length;
+  const isComplete = submittedCount === totalFields;
+  const progressPct = Math.round((submittedCount / totalFields) * 100);
+
+  return (
+    <div style={{ minHeight: '100vh' }}>
+      {/* Sticky Header */}
+      <nav style={{
+        position: 'sticky', top: 0, zIndex: 100,
+        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+        background: 'rgba(255,255,255,0.85)',
+        borderBottom: '1px solid rgba(31,30,30,0.06)',
+        padding: '12px 24px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={() => setScreen('hub')} style={{
+              background: 'rgba(31,30,30,0.04)', border: '1px solid rgba(31,30,30,0.08)',
+              borderRadius: 24, padding: '6px 14px', cursor: 'pointer', color: 'rgba(31,30,30,0.5)',
+              fontFamily: 'Roboto', fontSize: 12, fontWeight: 500,
+            }}>
+              ← Hub
+            </button>
+            <span style={{ fontFamily: 'Roboto', fontSize: 12, color: 'rgba(31,30,30,0.35)' }}>
+              Exercises / {ex.name}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              fontFamily: 'Roboto', fontSize: 11, fontWeight: 500,
+              background: 'rgba(31,30,30,0.04)', color: 'rgba(31,30,30,0.5)',
+              padding: '4px 12px', borderRadius: 20,
+            }}>
+              {submittedCount}/{totalFields} submitted
+            </span>
+            <span style={{
+              fontFamily: 'Roboto', fontSize: 11, fontWeight: 500,
+              background: 'rgba(222,0,123,0.06)', color: '#DE007B',
+              padding: '4px 12px', borderRadius: 20,
+            }}>
+              {role}
+            </span>
+            <button onClick={() => setShowCanvas(p => !p)} style={{
+              fontFamily: 'Roboto', fontSize: 11, fontWeight: 500,
+              padding: '6px 14px', borderRadius: 24,
+              border: showCanvas ? `1px solid ${ex.color}` : '1px solid rgba(31,30,30,0.1)',
+              background: showCanvas ? `${ex.color}12` : 'white',
+              color: showCanvas ? ex.color : 'rgba(31,30,30,0.5)',
+              cursor: 'pointer', transition: 'all 0.2s',
+            }}>
+              {showCanvas ? '✕ CANVAS' : '◧ CANVAS'}
+            </button>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div style={{ height: 2, background: 'rgba(31,30,30,0.04)', borderRadius: 2 }}>
+          <div style={{
+            height: '100%', width: `${progressPct}%`,
+            background: ex.color, borderRadius: 2, transition: 'width 0.5s ease',
+          }} />
+        </div>
+      </nav>
+
+      {/* Content */}
+      <div style={{
+        display: 'flex', maxWidth: 1200, margin: '0 auto', padding: '24px',
+        gap: 24,
+      }}>
+        {/* Fields Column */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Intro Block */}
+          <div className="fade-up" style={{ marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <span style={{ fontSize: 32 }}>{ex.icon}</span>
+              <div>
+                <h2 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: 28, color: '#1F1E1E', letterSpacing: '-0.5px' }}>
+                  {ex.name}
+                </h2>
+              </div>
+            </div>
+            <p style={{ fontFamily: 'Roboto', fontSize: 14, color: 'rgba(31,30,30,0.55)', lineHeight: 1.7, marginBottom: 16 }}>
+              {ex.description}
+            </p>
+            <div style={{
+              background: 'rgba(222,0,123,0.04)', border: '1px solid rgba(222,0,123,0.1)',
+              borderRadius: 14, padding: 18,
+            }}>
+              <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: '#DE007B', letterSpacing: '1.5px', marginBottom: 8 }}>
+                HOW THIS WORKS
+              </div>
+              <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.55)', lineHeight: 1.7 }}>
+                Write your strategic thinking in each field below. After 40+ characters, an AI coach will challenge your assumptions in real time. Submit when you're confident — peer benchmarks unlock only after submission. Your live canvas updates with every keystroke.
+              </p>
+            </div>
+          </div>
+
+          {/* Fields */}
+          {ex.fields.map((field, i) => (
+            <FieldCard
+              key={field.id}
+              field={field}
+              exId={ex.id}
+              exName={ex.name}
+              color={ex.color}
+              answer={getAnswer(ex.id, field.id)}
+              isSubmitted={isSubmitted(ex.id, field.id)}
+              setAnswer={setAnswer}
+              submitField={submitField}
+              coaching={coaching[field.id] || ''}
+              isLoading={loading[field.id] || false}
+              fetchCoaching={fetchCoaching}
+              role={role}
+              delay={i}
+              expandedPeers={expandedPeers}
+              setExpandedPeers={setExpandedPeers}
+            />
+          ))}
+
+          {/* Completion Card */}
+          {isComplete && (
+            <div className="fade-up" style={{
+              background: `linear-gradient(135deg, ${ex.color}0D, rgba(222,0,123,0.06))`,
+              border: `1px solid ${ex.color}22`,
+              borderRadius: 16, padding: 32, textAlign: 'center', marginTop: 24,
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
+              <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: 22, color: '#1F1E1E', marginBottom: 8 }}>
+                Exercise Complete
+              </h3>
+              <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.55)', lineHeight: 1.7, marginBottom: 20, maxWidth: 420, margin: '0 auto 20px' }}>
+                All answers submitted. Peer benchmarks are now unlocked above. Your responses have been anonymised and added to the peer pool.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <button onClick={() => setShowCanvas(true)} style={{
+                  fontFamily: 'Roboto', fontWeight: 500, fontSize: 14,
+                  padding: '10px 24px', borderRadius: 28,
+                  background: '#DE007B', color: 'white', border: 'none',
+                  cursor: 'pointer',
+                }}>
+                  View Live Canvas →
+                </button>
+                <button onClick={() => setScreen('hub')} style={{
+                  fontFamily: 'Roboto', fontWeight: 500, fontSize: 14,
+                  padding: '10px 24px', borderRadius: 28,
+                  background: '#1F1E1E', color: 'white',
+                  border: 'none', cursor: 'pointer',
+                }}>
+                  Back to Hub
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Canvas Panel */}
+        {showCanvas && (
+          <div style={{
+            width: 340, flexShrink: 0, position: 'sticky', top: 80,
+            alignSelf: 'flex-start', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto',
+          }}>
+            <div className="fade-up" style={{
+              background: 'white', border: '1px solid rgba(31,30,30,0.06)',
+              borderRadius: 16, padding: 18, marginBottom: 16,
+              boxShadow: '0 1px 3px rgba(31,30,30,0.03)',
+            }}>
+              <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: 'rgba(31,30,30,0.4)', letterSpacing: '1.5px', marginBottom: 14 }}>
+                LIVE CANVAS
+              </div>
+              {ex.canvas === 'radar' && <RadarCanvas ex={ex} answers={answers} />}
+              {ex.canvas === 'errc' && <ERRCCanvas ex={ex} answers={answers} />}
+              {ex.canvas === 'ansoff' && <AnsoffCanvas ex={ex} answers={answers} />}
+            </div>
+
+            {/* Completion Checklist */}
+            <div style={{
+              background: 'white', border: '1px solid rgba(31,30,30,0.06)',
+              borderRadius: 16, padding: 18,
+              boxShadow: '0 1px 3px rgba(31,30,30,0.03)',
+            }}>
+              <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: 'rgba(31,30,30,0.4)', letterSpacing: '1.5px', marginBottom: 12 }}>
+                COMPLETION
+              </div>
+              {ex.fields.map(f => {
+                const done = isSubmitted(ex.id, f.id);
+                return (
+                  <div key={f.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '7px 0', borderBottom: '1px solid rgba(31,30,30,0.04)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: done ? ex.color : 'rgba(31,30,30,0.12)',
+                        transition: 'background 0.3s',
+                      }} />
+                      <span style={{
+                        fontFamily: 'Roboto', fontSize: 12,
+                        color: done ? '#1F1E1E' : 'rgba(31,30,30,0.35)',
+                      }}>
+                        {f.label}
+                      </span>
+                    </div>
+                    {done && <span style={{ fontFamily: 'Roboto', fontSize: 11, color: ex.color, fontWeight: 500 }}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── FIELD CARD ───────────────────── */
+
+function FieldCard({ field, exId, exName, color, answer, isSubmitted: fieldSubmitted, setAnswer, submitField, coaching: coachText, isLoading, fetchCoaching, role, delay, expandedPeers, setExpandedPeers }) {
+  const debounceRef = useRef(null);
+
+  const handleChange = useCallback((e) => {
+    const val = e.target.value;
+    setAnswer(exId, field.id, val);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (val.length >= 40) {
+      debounceRef.current = setTimeout(() => {
+        fetchCoaching(exName, field.label, field.id, val, role);
+      }, 1800);
+    }
+  }, [exId, field.id, field.label, exName, setAnswer, fetchCoaching, role]);
+
+  const peers = PEER_ANSWERS[field.id] || [];
+  const showSubmitBtn = answer.length >= 30 && !fieldSubmitted;
+  const peerExpanded = expandedPeers[field.id] || false;
+
+  return (
+    <div className={`fade-up fade-up-${delay + 1}`} style={{
+      background: 'white',
+      border: '1px solid rgba(31,30,30,0.06)',
+      borderRadius: 16, padding: 22, marginBottom: 16,
+      transition: 'border-color 0.3s',
+      borderColor: fieldSubmitted ? `${color}33` : 'rgba(31,30,30,0.06)',
+      boxShadow: '0 1px 3px rgba(31,30,30,0.03)',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: fieldSubmitted ? color : 'rgba(31,30,30,0.12)',
+          transition: 'background 0.3s',
+        }} />
+        <span style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: 15, color: '#1F1E1E' }}>
+          {field.label}
+        </span>
+        {fieldSubmitted && (
+          <span style={{
+            fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: color,
+            background: `${color}12`, padding: '3px 10px', borderRadius: 20,
+            letterSpacing: '0.5px',
+          }}>
+            ✓ SUBMITTED
+          </span>
+        )}
+      </div>
+
+      {/* Prompt */}
+      <p style={{
+        fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.5)', lineHeight: 1.6,
+        marginBottom: 12,
+      }}>
+        {field.prompt}
+      </p>
+
+      {/* Textarea */}
+      <textarea
+        value={answer}
+        onChange={handleChange}
+        disabled={fieldSubmitted}
+        placeholder={field.placeholder}
+        style={{
+          width: '100%', minHeight: 100, padding: 14, borderRadius: 12,
+          background: fieldSubmitted ? 'rgba(31,30,30,0.02)' : 'white',
+          border: '1px solid rgba(31,30,30,0.1)',
+          color: fieldSubmitted ? 'rgba(31,30,30,0.4)' : '#1F1E1E',
+          fontFamily: 'Roboto', fontSize: 14, lineHeight: 1.6,
+          resize: 'vertical', transition: 'all 0.2s',
+        }}
+      />
+
+      {/* AI Coaching */}
+      {(isLoading || coachText) && !fieldSubmitted && (
+        <div style={{
+          marginTop: 12, padding: 16, borderRadius: 12,
+          background: 'rgba(222,0,123,0.04)',
+          border: '1px solid rgba(222,0,123,0.08)',
+        }}>
+          <div style={{
+            fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: '#DE007B',
+            letterSpacing: '1px', marginBottom: 8,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            ◎ AI COACH
+            {isLoading && (
+              <span style={{ display: 'inline-flex', gap: 3 }}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{
+                    width: 4, height: 4, borderRadius: '50%', background: '#DE007B',
+                    animation: `pulse 1s ease-in-out ${i * 0.2}s infinite`,
+                    display: 'inline-block',
+                  }} />
+                ))}
+              </span>
+            )}
+          </div>
+          {!isLoading && coachText && (
+            <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.6)', lineHeight: 1.6 }}>
+              {coachText}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Submit Button */}
+      {showSubmitBtn && (
+        <button onClick={() => submitField(exId, field.id)} style={{
+          marginTop: 12, fontFamily: 'Roboto', fontWeight: 500, fontSize: 13,
+          padding: '9px 24px', borderRadius: 28,
+          background: '#DE007B', color: 'white', border: 'none',
+          cursor: 'pointer', transition: 'all 0.2s',
+        }}>
+          Submit Answer
+        </button>
+      )}
+
+      {/* Peer Benchmark */}
+      <div style={{ marginTop: 18 }}>
+        {!fieldSubmitted ? (
+          <div style={{
+            border: '1px dashed rgba(31,30,30,0.12)',
+            borderRadius: 12, padding: 18, textAlign: 'center',
+          }}>
+            <p style={{ fontFamily: 'Roboto', fontSize: 12, color: 'rgba(31,30,30,0.35)' }}>
+              Submit your answer to unlock peer benchmarks
+            </p>
+          </div>
+        ) : (
+          <div>
+            <button onClick={() => setExpandedPeers(prev => ({ ...prev, [field.id]: !peerExpanded }))} style={{
+              fontFamily: 'Roboto', fontSize: 11, fontWeight: 500, color: 'rgba(31,30,30,0.45)', letterSpacing: '0.5px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8,
+            }}>
+              <span style={{ transform: peerExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▸</span>
+              PEER BENCHMARKS ({peers.length})
+            </button>
+            {peerExpanded && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {peers.map((peer, i) => (
+                  <div key={i} style={{
+                    background: 'rgba(31,30,30,0.02)',
+                    borderLeft: `3px solid ${color}`,
+                    borderRadius: '0 12px 12px 0', padding: 16,
+                  }}>
+                    <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: color, letterSpacing: '0.5px', marginBottom: 6 }}>
+                      {peer.label}
+                    </div>
+                    <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.55)', lineHeight: 1.6 }}>
+                      {peer.text}
+                    </p>
+                  </div>
+                ))}
+                {/* AI Synthesis */}
+                <div style={{
+                  background: 'rgba(222,0,123,0.03)',
+                  border: '1px solid rgba(222,0,123,0.08)',
+                  borderRadius: 12, padding: 16,
+                }}>
+                  <div style={{ fontFamily: 'Roboto', fontSize: 10, fontWeight: 500, color: '#DE007B', letterSpacing: '1px', marginBottom: 6 }}>
+                    ◎ AI SYNTHESIS
+                  </div>
+                  <p style={{ fontFamily: 'Roboto', fontSize: 13, color: 'rgba(31,30,30,0.55)', lineHeight: 1.6 }}>
+                    {AI_SYNTHESIS[exId]}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── RADAR CANVAS (MOAT) ───────────────────── */
+
+function RadarCanvas({ ex, answers }) {
+  const cx = 160, cy = 160, r = 110;
+  const fields = ex.fields;
+  const n = fields.length;
+
+  const scoreFromLength = (len) => {
+    if (len > 120) return 4;
+    if (len > 60) return 3;
+    if (len > 20) return 2;
+    if (len > 0) return 1;
+    return 0;
+  };
+
+  const getPoint = (i, val, maxVal) => {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const dist = (val / maxVal) * r;
+    return { x: cx + dist * Math.cos(angle), y: cy + dist * Math.sin(angle) };
+  };
+
+  const gridLevels = [1, 2, 3, 4, 5];
+  const scores = fields.map(f => scoreFromLength((answers[ex.id]?.[f.id] || '').length));
+  const userPoints = scores.map((s, i) => getPoint(i, s, 5));
+  const userPath = userPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+
+  return (
+    <svg viewBox="0 0 320 320" style={{ width: '100%', height: 'auto' }}>
+      {/* Grid */}
+      {gridLevels.map(level => {
+        const pts = Array.from({ length: n }, (_, i) => getPoint(i, level, 5));
+        const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+        return <path key={level} d={path} fill="none" stroke="rgba(31,30,30,0.06)" strokeWidth={1} />;
+      })}
+      {/* Axes */}
+      {fields.map((_, i) => {
+        const end = getPoint(i, 5, 5);
+        return <line key={i} x1={cx} y1={cy} x2={end.x} y2={end.y} stroke="rgba(31,30,30,0.06)" strokeWidth={0.5} />;
+      })}
+      {/* User polygon */}
+      {scores.some(s => s > 0) && (
+        <path d={userPath} fill="rgba(228,114,37,0.12)" stroke="#E47225" strokeWidth={2} />
+      )}
+      {/* Dots */}
+      {userPoints.map((p, i) => scores[i] > 0 && (
+        <circle key={i} cx={p.x} cy={p.y} r={4} fill="#E47225" />
+      ))}
+      {/* Labels */}
+      {fields.map((f, i) => {
+        const labelPt = getPoint(i, 6, 5);
+        const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+        const anchor = Math.abs(angle) < 0.1 || Math.abs(angle - Math.PI) < 0.1 ? 'middle'
+          : angle > -Math.PI / 2 && angle < Math.PI / 2 ? 'start' : 'end';
+        return (
+          <text key={i} x={labelPt.x} y={labelPt.y}
+            textAnchor={anchor} dominantBaseline="middle"
+            style={{ fontFamily: 'Roboto', fontSize: 8, fill: 'rgba(31,30,30,0.4)' }}>
+            {f.label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ───────────────────── ERRC CANVAS (BLUE OCEAN) ───────────────────── */
+
+function ERRCCanvas({ ex, answers }) {
+  const quadrants = [
+    { id: 'eliminate', label: 'ELIMINATE', color: '#E0043B' },
+    { id: 'reduce', label: 'REDUCE', color: '#E47225' },
+    { id: 'raise', label: 'RAISE', color: '#04C9A6' },
+    { id: 'create', label: 'CREATE', color: '#0B91DB' },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      {quadrants.map(q => {
+        const text = answers[ex.id]?.[q.id] || '';
+        return (
+          <div key={q.id} style={{
+            background: `${q.color}0A`,
+            border: `1px solid ${q.color}18`,
+            borderRadius: 10, padding: 12, minHeight: 90,
+          }}>
+            <div style={{
+              fontFamily: 'Roboto', fontSize: 9, fontWeight: 500, color: q.color,
+              letterSpacing: '1px', marginBottom: 6,
+            }}>
+              {q.label}
+            </div>
+            <p style={{
+              fontFamily: 'Roboto', fontSize: 10, lineHeight: 1.5,
+              color: text ? 'rgba(31,30,30,0.6)' : 'rgba(31,30,30,0.25)',
+              fontStyle: text ? 'normal' : 'italic',
+            }}>
+              {text ? text.slice(0, 100) + (text.length > 100 ? '…' : '') : 'Answer the field to populate →'}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ───────────────────── ANSOFF CANVAS ───────────────────── */
+
+function AnsoffCanvas({ ex, answers }) {
+  const quadrants = [
+    { id: 'penetration', label: 'Market\nPenetration', row: 0, col: 0, color: '#E0043B' },
+    { id: 'product_dev', label: 'Product\nDevelopment', row: 0, col: 1, color: '#E47225' },
+    { id: 'market_dev', label: 'Market\nDevelopment', row: 1, col: 0, color: '#04C9A6' },
+    { id: 'diversification', label: 'Diversification', row: 1, col: 1, color: '#734286' },
+  ];
+
+  return (
+    <div>
+      {/* Column headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr', gap: 6, marginBottom: 4 }}>
+        <div />
+        <div style={{ fontFamily: 'Roboto', fontSize: 9, fontWeight: 500, color: 'rgba(31,30,30,0.35)', textAlign: 'center', letterSpacing: '0.5px' }}>
+          EXISTING PRODUCT
+        </div>
+        <div style={{ fontFamily: 'Roboto', fontSize: 9, fontWeight: 500, color: 'rgba(31,30,30,0.35)', textAlign: 'center', letterSpacing: '0.5px' }}>
+          NEW PRODUCT
+        </div>
+      </div>
+
+      {[0, 1].map(row => (
+        <div key={row} style={{
+          display: 'grid', gridTemplateColumns: '28px 1fr 1fr', gap: 6, marginBottom: 6,
+        }}>
+          {/* Row label */}
+          <div style={{
+            fontFamily: 'Roboto', fontSize: 9, fontWeight: 500, color: 'rgba(31,30,30,0.35)',
+            writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            letterSpacing: '0.5px',
+          }}>
+            {row === 0 ? 'EXISTING MKT' : 'NEW MARKET'}
+          </div>
+          {[0, 1].map(col => {
+            const q = quadrants.find(q => q.row === row && q.col === col);
+            const text = answers[ex.id]?.[q.id] || '';
+            const hasContent = text.length > 20;
+            return (
+              <div key={col} style={{
+                background: hasContent ? `${q.color}0D` : 'rgba(31,30,30,0.02)',
+                border: `1px solid ${hasContent ? `${q.color}33` : 'rgba(31,30,30,0.06)'}`,
+                borderRadius: 10, padding: 10, minHeight: 80,
+                transition: 'all 0.3s',
+              }}>
+                <div style={{
+                  fontFamily: 'Roboto', fontSize: 9, fontWeight: 500, color: q.color,
+                  letterSpacing: '0.5px', marginBottom: 4, whiteSpace: 'pre-line',
+                }}>
+                  {q.label}
+                </div>
+                {hasContent && (
+                  <p style={{ fontFamily: 'Roboto', fontSize: 9, color: 'rgba(31,30,30,0.5)', lineHeight: 1.5 }}>
+                    {text.slice(0, 80)}{text.length > 80 ? '…' : ''}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}

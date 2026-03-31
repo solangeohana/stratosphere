@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+*.bak
+*.bak2
+*.old
+*.backup
